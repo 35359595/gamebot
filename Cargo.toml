@@ -1,0 +1,10 @@
+[package]
+name = "gamebot"
+authors = ["Ivan Temchenko <https://github.com/35359595>"]
+description = "Discord words game bot"
+license = "EUPL-v1.3"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+discord = "0.8.1"
