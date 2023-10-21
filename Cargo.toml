@@ -7,4 +7,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-discord = "0.8.1"
+discord = { git = "https://github.com/SpaceManiac/discord-rs" }
