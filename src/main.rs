@@ -2,8 +2,10 @@ extern crate discord;
 extern crate rand;
 extern crate sqlite;
 
-use discord::model::Event;
-use discord::Discord;
+use discord::{
+    model::{Event, ReactionEmoji},
+    Discord,
+};
 use rand::{prelude::*, thread_rng};
 use sqlite::Row;
 use std::env;
@@ -98,6 +100,12 @@ fn main() {
                         .read::<&str, _>("word")
                         .replace(|c: char| c == '\"', "");
                     let _ = discord.send_message(message.channel_id, &current_question, "", false);
+                } else if !message.author.bot {
+                    let _ = discord.add_reaction(
+                        message.channel_id,
+                        message.id,
+                        ReactionEmoji::Unicode("➖".to_string()),
+                    );
                 }
                 //} else if message.content == "!quit" {
                 //    println!("Quitting.");
