@@ -66,20 +66,21 @@ fn main() {
     loop {
         match connection.recv_event() {
             Ok(Event::MessageCreate(message)) => {
+                let text = message.content.to_owned();
                 println!(
                     "{}: {} says: {}",
-                    message.timestamp, message.author.name, message.content
+                    message.timestamp, message.author.name, text
                 );
-                if message.content == "!test" {
+                if text == "!test" {
                     if message.author.name != "Word Game Bot" {
                         let _ = discord.send_message(
                             message.channel_id,
-                            format!("This is a reply to the message. {}", message.content).as_str(),
+                            format!("This is a reply to the message. {}", text).as_str(),
                             "",
                             false,
                         );
                     }
-                } else if message.content == "!next" || message.content == "!далі" {
+                } else if text == "!next" || text == "!далі" {
                     current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
@@ -87,14 +88,28 @@ fn main() {
                         "",
                         false,
                     );
-                } else if message.content.trim().to_lowercase() == "!q" {
+                } else if text == "!відповідь" {
+                    let _ = discord.send_message(
+                        message.channel_id,
+                        &current_question.answer,
+                        "",
+                        false,
+                    );
+                    current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
                         &current_question.question,
                         "",
                         false,
                     );
-                } else if message.content.trim().to_lowercase() == "!підказка" {
+                } else if text.trim().to_lowercase() == "!q" {
+                    let _ = discord.send_message(
+                        message.channel_id,
+                        &current_question.question,
+                        "",
+                        false,
+                    );
+                } else if text.trim().to_lowercase() == "!підказка" {
                     let _ = discord.send_message(
                         message.channel_id,
                         &current_question
@@ -108,7 +123,7 @@ fn main() {
                         "",
                         false,
                     );
-                } else if message.content.to_lowercase().trim() == current_question.answer {
+                } else if text.to_lowercase().trim() == current_question.answer {
                     // ansver verify and TODO: set score
                     let _ = discord.send_message(
                         message.channel_id,
@@ -136,7 +151,7 @@ fn main() {
                         ReactionEmoji::Unicode("➖".to_string()),
                     );
                 }
-                //} else if message.content == "!quit" {
+                //} else if text == "!quit" {
                 //    println!("Quitting.");
                 //    break;
                 //}
