@@ -8,3 +8,4 @@ edition = "2021"
 
 [dependencies]
 discord = { git = "https://github.com/SpaceManiac/discord-rs" }
+sqlite = "^0.31"
