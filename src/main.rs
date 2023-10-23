@@ -1,8 +1,11 @@
 extern crate discord;
+extern crate rand;
 extern crate sqlite;
 
 use discord::model::Event;
 use discord::Discord;
+use rand::{prelude::*, thread_rng};
+use sqlite::Row;
 use std::env;
 
 fn main() {
@@ -12,14 +15,18 @@ fn main() {
     println!("DB path: {}", &db_path);
 
     // Verb selector
-    let query = "SELECT * FROM wlist WHERE id_syn == 1";
-
+    let query = "SELECT * FROM wlist WHERE interpretation IS NOT NULL";
     let db = sqlite::open(&db_path).expect("db expected");
-    let mut data = db
+    let mut data: Vec<Row> = db
         .prepare(query)
         .unwrap()
         .into_iter()
-        .map(|row| row.unwrap());
+        .map(|row| row.unwrap())
+        .collect();
+
+    // RNG
+    let mut rng = thread_rng();
+    data.shuffle(&mut rng);
 
     // Log in to Discord using a bot token from the environment
     let discord = Discord::from_bot_token(&env::var("DISCORD_TOKEN").expect("Expected token"))
@@ -29,7 +36,8 @@ fn main() {
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
     let mut current_answer = String::default();
-    let mut current_question = "";
+    let mut current_question = String::default();
+    let mut current_weight = 0;
 
     loop {
         match connection.recv_event() {
@@ -47,13 +55,29 @@ fn main() {
                             false,
                         );
                     }
-                } else if message.content == "!next" {
-                    let new_question = data.next().unwrap();
-                    current_question = new_question.read::<&str, _>("interpretation");
+                } else if message.content == "!next" || message.content == "!далі" {
+                    let new_question = data.pop().unwrap();
+                    current_question = new_question.read::<&str, _>("interpretation").to_string();
                     current_answer = new_question
                         .read::<&str, _>("word")
                         .replace(|c: char| c == '\"', "");
-                    let _ = discord.send_message(message.channel_id, current_question, "", false);
+                    current_weight = new_question.read::<i64, _>("id_syn");
+                    let _ = discord.send_message(message.channel_id, &current_question, "", false);
+                } else if message.content.trim().to_lowercase() == "!q" {
+                    let _ = discord.send_message(message.channel_id, &current_question, "", false);
+                } else if message.content.trim().to_lowercase() == "!підказка" {
+                    let _ = discord.send_message(
+                        message.channel_id,
+                        &current_answer
+                            .chars()
+                            .into_iter()
+                            .rev()
+                            .last()
+                            .unwrap()
+                            .to_string(),
+                        "",
+                        false,
+                    );
                 } else if message.content.to_lowercase().trim() == current_answer {
                     // ansver verify and TODO: set score
                     let _ = discord.send_message(
@@ -62,18 +86,18 @@ fn main() {
                             "Вірно {}. Відповідь {}. Рейтинг: {}",
                             message.author.mention(),
                             current_answer,
-                            0 //TODO
+                            current_weight //TODO
                         )
                         .as_str(),
                         "",
                         false,
                     );
-                    let new_question = data.next().unwrap();
-                    current_question = new_question.read::<&str, _>("interpretation");
+                    let new_question = data.pop().unwrap();
+                    current_question = new_question.read::<&str, _>("interpretation").to_string();
                     current_answer = new_question
                         .read::<&str, _>("word")
                         .replace(|c: char| c == '\"', "");
-                    let _ = discord.send_message(message.channel_id, current_question, "", false);
+                    let _ = discord.send_message(message.channel_id, &current_question, "", false);
                 }
                 //} else if message.content == "!quit" {
                 //    println!("Quitting.");
