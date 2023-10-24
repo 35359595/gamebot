@@ -31,7 +31,7 @@ impl Display for Question {
         f.write_fmt(format_args!(
             "{} ({} літер) [+{}]",
             self.question,
-            self.question.len(),
+            self.answer.len(),
             self.score
         ))
     }
