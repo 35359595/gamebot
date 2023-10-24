@@ -38,6 +38,8 @@ fn next_question(r: Row) -> Question {
 
 fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
     let current = format!("SELECT * FROM scores WHERE user == {user}");
+    let ignore_if_exist = format!("INSERT OR IGNORE INTO scores (user, score) VALUES ({user}, 0)");
+    db.execute(ignore_if_exist).unwrap();
     let data = db
         .prepare(&current)
         .unwrap()
@@ -45,9 +47,8 @@ fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
         .last()
         .unwrap()
         .unwrap();
-    let user_id = data.read::<i64, _>("id");
     let total_score = data.read::<i64, _>("score") + score;
-    let insert = format!("INSERT OR REPLACE INTO scores VALUES ({user_id}, {user}, {total_score})");
+    let insert = format!("INSERT OR REPLACE INTO scores VALUES ({user}, {total_score})");
     let _ = db.execute(&insert).unwrap();
     total_score
 }
@@ -60,7 +61,8 @@ fn main() {
 
     // Verb selector
     const QUERY: &str = "SELECT * FROM wlist WHERE interpretation IS NOT NULL";
-    const SCORE_TABLE_CREATE: &str = "CREATE TABLE IF NOT EXISTS scores (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER KEY, score INTEGER)";
+    const SCORE_TABLE_CREATE: &str =
+        "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
     // Create if not present `score` table
     let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
@@ -105,7 +107,10 @@ fn main() {
                     current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
-                        &current_question.question,
+                        &format!(
+                            "{}  [+{}]",
+                            current_question.question, current_question.score
+                        ),
                         "",
                         false,
                     );
@@ -119,14 +124,20 @@ fn main() {
                     current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
-                        &current_question.question,
+                        &format!(
+                            "{}  [+{}]",
+                            current_question.question, current_question.score
+                        ),
                         "",
                         false,
                     );
                 } else if text.trim().to_lowercase() == "!q" {
                     let _ = discord.send_message(
                         message.channel_id,
-                        &current_question.question,
+                        &format!(
+                            "{}  [+{}]",
+                            current_question.question, current_question.score
+                        ),
                         "",
                         false,
                     );
@@ -151,7 +162,7 @@ fn main() {
                     let _ = discord.send_message(
                         message.channel_id,
                         format!(
-                            "Вірно {}. Відповідь {}. Рейтинг: {}",
+                            "Вірно {}. Відповідь {}. Загальний рейтинг: {}",
                             message.author.mention(),
                             current_question.answer,
                             new_score
@@ -163,7 +174,10 @@ fn main() {
                     current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
-                        &current_question.question,
+                        &format!(
+                            "{}  [+{}]",
+                            current_question.question, current_question.score
+                        ),
                         "",
                         false,
                     );
