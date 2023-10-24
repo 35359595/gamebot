@@ -8,7 +8,7 @@ use discord::{
 };
 use rand::{prelude::*, thread_rng};
 use sqlite::{Connection, Row};
-use std::env;
+use std::{env, fmt::Display};
 
 struct Question {
     question: String,
@@ -23,6 +23,17 @@ impl Question {
             answer,
             score,
         }
+    }
+}
+
+impl Display for Question {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{} ({} літер) [+{}]",
+            self.question,
+            self.question.len(),
+            self.score
+        ))
     }
 }
 
@@ -66,7 +77,8 @@ fn main() {
     println!("DB path: {}", &db_path);
 
     // Verb selector
-    const QUERY: &str = "SELECT * FROM wlist WHERE interpretation IS NOT NULL";
+    const QUERY: &str =
+        "SELECT * FROM wlist WHERE interpretation IS NOT NULL AND word NOT LIKE '(%)'";
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
@@ -95,74 +107,54 @@ fn main() {
     loop {
         match connection.recv_event() {
             Ok(Event::MessageCreate(message)) => {
-                let text = message.content.to_owned();
+                let text = message.content.to_owned().trim().to_lowercase();
                 println!(
                     "{}: {} says: {}",
                     message.timestamp, message.author.name, text
                 );
-                if text == "!test" {
-                    if message.author.name != "Word Game Bot" {
+                // service commands
+                if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
+                    if text == "!next" || text == "!далі" || text == "!відповідь" {
                         let _ = discord.send_message(
                             message.channel_id,
-                            format!("This is a reply to the message. {}", text).as_str(),
+                            &current_question.to_string(),
+                            "",
+                            false,
+                        );
+                        current_question = next_question(data.pop().unwrap());
+                        let _ = discord.send_message(
+                            message.channel_id,
+                            &current_question.to_string(),
+                            "",
+                            false,
+                        );
+                    } else if text == "!q" || text == "!питання" || text == "!п" {
+                        let _ = discord.send_message(
+                            message.channel_id,
+                            &format!(
+                                "{}  [+{}]",
+                                current_question.question, current_question.score
+                            ),
+                            "",
+                            false,
+                        );
+                    } else if text.trim().to_lowercase() == "!підказка" {
+                        let _ = discord.send_message(
+                            message.channel_id,
+                            &current_question
+                                .answer
+                                .chars()
+                                .into_iter()
+                                .rev()
+                                .last()
+                                .unwrap()
+                                .to_string(),
                             "",
                             false,
                         );
                     }
-                } else if text == "!next" || text == "!далі" {
-                    current_question = next_question(data.pop().unwrap());
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &format!(
-                            "{}  [+{}]",
-                            current_question.question, current_question.score
-                        ),
-                        "",
-                        false,
-                    );
-                } else if text == "!відповідь" {
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &current_question.answer,
-                        "",
-                        false,
-                    );
-                    current_question = next_question(data.pop().unwrap());
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &format!(
-                            "{}  [+{}]",
-                            current_question.question, current_question.score
-                        ),
-                        "",
-                        false,
-                    );
-                } else if text.trim().to_lowercase() == "!q" {
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &format!(
-                            "{}  [+{}]",
-                            current_question.question, current_question.score
-                        ),
-                        "",
-                        false,
-                    );
-                } else if text.trim().to_lowercase() == "!підказка" {
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &current_question
-                            .answer
-                            .chars()
-                            .into_iter()
-                            .rev()
-                            .last()
-                            .unwrap()
-                            .to_string(),
-                        "",
-                        false,
-                    );
-                } else if text.to_lowercase().trim() == current_question.answer {
-                    // ansver verify and TODO: set score
+                } else if text == current_question.answer {
+                    // ansver verify and update score
                     let new_score =
                         increment_score(&db, message.author.id.0, current_question.score);
                     let _ = discord.send_message(
@@ -180,10 +172,7 @@ fn main() {
                     current_question = next_question(data.pop().unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
-                        &format!(
-                            "{}  [+{}]",
-                            current_question.question, current_question.score
-                        ),
+                        &current_question.to_string(),
                         "",
                         false,
                     );
@@ -194,10 +183,6 @@ fn main() {
                         ReactionEmoji::Unicode("➖".to_string()),
                     );
                 }
-                //} else if text == "!quit" {
-                //    println!("Quitting.");
-                //    break;
-                //}
             }
             Ok(_) => {}
             Err(discord::Error::Closed(code, body)) => {
