@@ -55,7 +55,7 @@ fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
 
 fn main() {
     println!("Opening DB");
-    let mut db_path = env::var("CARGO_MANIFEST_DIR").expect("No manifest dir");
+    let mut db_path = env::var("CARGO_MANIFEST_DIR").unwrap_or(".".into());
     db_path.push_str("/db/synsets_ua.db");
     println!("DB path: {}", &db_path);
 
