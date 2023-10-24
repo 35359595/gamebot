@@ -7,7 +7,7 @@ use discord::{
     Discord,
 };
 use rand::{prelude::*, thread_rng};
-use sqlite::Row;
+use sqlite::{Connection, Row};
 use std::env;
 
 struct Question {
@@ -27,11 +27,29 @@ impl Question {
 }
 
 fn next_question(r: Row) -> Question {
+    let new_answer = r.read::<&str, _>("word").replace(|c: char| c == '\"', "");
+    println!("{new_answer}");
     Question::new(
         r.read::<&str, _>("interpretation").to_string(),
-        r.read::<&str, _>("word").replace(|c: char| c == '\"', ""),
+        new_answer,
         r.read::<i64, _>("id_syn"),
     )
+}
+
+fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
+    let current = format!("SELECT * FROM scores WHERE user == {user}");
+    let data = db
+        .prepare(&current)
+        .unwrap()
+        .into_iter()
+        .last()
+        .unwrap()
+        .unwrap();
+    let user_id = data.read::<i64, _>("id");
+    let total_score = data.read::<i64, _>("score") + score;
+    let insert = format!("INSERT OR REPLACE INTO scores VALUES ({user_id}, {user}, {total_score})");
+    let _ = db.execute(&insert).unwrap();
+    total_score
 }
 
 fn main() {
@@ -41,10 +59,13 @@ fn main() {
     println!("DB path: {}", &db_path);
 
     // Verb selector
-    let query = "SELECT * FROM wlist WHERE interpretation IS NOT NULL";
+    const QUERY: &str = "SELECT * FROM wlist WHERE interpretation IS NOT NULL";
+    const SCORE_TABLE_CREATE: &str = "CREATE TABLE IF NOT EXISTS scores (id INTEGER PRIMARY KEY AUTOINCREMENT, user INTEGER KEY, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
+    // Create if not present `score` table
+    let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
     let mut data: Vec<Row> = db
-        .prepare(query)
+        .prepare(QUERY)
         .unwrap()
         .into_iter()
         .map(|row| row.unwrap())
@@ -125,13 +146,15 @@ fn main() {
                     );
                 } else if text.to_lowercase().trim() == current_question.answer {
                     // ansver verify and TODO: set score
+                    let new_score =
+                        increment_score(&db, message.author.id.0, current_question.score);
                     let _ = discord.send_message(
                         message.channel_id,
                         format!(
                             "Вірно {}. Відповідь {}. Рейтинг: {}",
                             message.author.mention(),
                             current_question.answer,
-                            current_question.score //TODO
+                            new_score
                         )
                         .as_str(),
                         "",
