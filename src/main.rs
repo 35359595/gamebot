@@ -131,10 +131,7 @@ fn main() {
                     } else if text == "!q" || text == "!питання" || text == "!п" {
                         let _ = discord.send_message(
                             message.channel_id,
-                            &format!(
-                                "{}  [+{}]",
-                                current_question.question, current_question.score
-                            ),
+                            &current_question.to_string(),
                             "",
                             false,
                         );
