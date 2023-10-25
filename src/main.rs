@@ -53,17 +53,20 @@ fn next_question(r: Row) -> Question {
 
 fn get_score(db: &Connection, user: u64) -> (i64, usize, usize) {
     let q = format!("SELECT * FROM scores WHERE user == {user}");
-    let data = db.prepare(&q).unwrap().into_iter().last().unwrap().unwrap();
-    let score = data.read::<i64, _>("score");
-    let mut all_scores = db
-        .prepare("SELECT * FROM scores")
-        .unwrap()
-        .into_iter()
-        .map(|r| r.unwrap().read::<i64, _>("score"))
-        .collect::<Vec<i64>>();
-    all_scores.sort();
-    let standing = all_scores.iter().position(|n| *n == score).unwrap() + 1;
-    (score, standing, all_scores.len())
+    if let Some(Ok(data)) = db.prepare(&q).unwrap().into_iter().last() {
+        let score = data.read::<i64, _>("score");
+        let mut all_scores = db
+            .prepare("SELECT * FROM scores")
+            .unwrap()
+            .into_iter()
+            .map(|r| r.unwrap().read::<i64, _>("score"))
+            .collect::<Vec<i64>>();
+        all_scores.sort();
+        let standing = all_scores.iter().position(|n| *n == score).unwrap() + 1;
+        (score, standing, all_scores.len())
+    } else {
+        (0, 0, 0)
+    }
 }
 
 fn get_top(db: &Connection) -> Vec<(i64, i64)> {
@@ -186,18 +189,27 @@ fn main() {
                         let _ = discord.send_message(message.channel_id, &hint, "", false);
                     } else if text == "!рейтинг" {
                         let (score, standing, total) = get_score(&db, message.author.id.0);
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &format!(
-                                "{} має {} очок і є {} зі {}",
-                                message.author.mention(),
-                                score,
-                                standing,
-                                total
-                            ),
-                            "",
-                            false,
-                        );
+                        if score == 0 {
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                &format!("{} нічого ще не відгадано...", message.author.mention()),
+                                "",
+                                false,
+                            );
+                        } else {
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                &format!(
+                                    "{} має {} очок і є {} зі {}",
+                                    message.author.mention(),
+                                    score,
+                                    standing,
+                                    total
+                                ),
+                                "",
+                                false,
+                            );
+                        }
                     } else if text == "!топ" {
                         let top = get_top(&db);
                         let mut top_report = String::default();
