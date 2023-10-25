@@ -35,7 +35,7 @@ impl Display for Question {
         f.write_fmt(format_args!(
             "{} ({} літер) [+{}]",
             self.bold.replace_all(&self.question, "**"),
-            self.answer.chars().into_iter().size_hint().0,
+            self.answer.chars().count(),
             self.score
         ))
     }
@@ -154,7 +154,7 @@ fn main() {
                             false,
                         );
                     }
-                } else if text == current_question.answer {
+                } else if text.contains(&current_question.answer) {
                     // ansver verify and update score
                     let new_score =
                         increment_score(&db, message.author.id.0, current_question.score);
