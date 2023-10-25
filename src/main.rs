@@ -56,15 +56,29 @@ fn get_score(db: &Connection, user: u64) -> (i64, usize, usize) {
     let data = db.prepare(&q).unwrap().into_iter().last().unwrap().unwrap();
     let score = data.read::<i64, _>("score");
     let mut all_scores = db
-        .prepare("SELECT score FROM scores")
+        .prepare("SELECT * FROM scores")
         .unwrap()
         .into_iter()
         .map(|r| r.unwrap().read::<i64, _>("score"))
         .collect::<Vec<i64>>();
-    all_scores
-        .sort();
+    all_scores.sort();
     let standing = all_scores.iter().position(|n| *n == score).unwrap() + 1;
     (score, standing, all_scores.len())
+}
+
+fn get_top(db: &Connection) -> Vec<(i64, i64)> {
+    let mut accum = Vec::with_capacity(10);
+    db.prepare("SELECT * FROM scores ORDER BY score DESC LIMIT 10")
+        .unwrap()
+        .into_iter()
+        .map(|r| {
+            let row = r.unwrap();
+            let score = row.read::<i64, _>("score");
+            let user = row.read::<i64, _>("user");
+            accum.push((user, score));
+        })
+        .for_each(drop);
+    accum
 }
 
 fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
@@ -184,6 +198,28 @@ fn main() {
                             false,
                         );
                     } else if text == "!топ" {
+                        let top = get_top(&db);
+                        let mut top_report = String::default();
+                        top.into_iter()
+                            .enumerate()
+                            .map(|(id, (user, score))| {
+                                top_report.push_str(
+                                    format!(
+                                        "{}    |    {}    |    {}\n",
+                                        id + 1,
+                                        discord
+                                            .get_user(discord::model::UserId(
+                                                user.try_into().unwrap()
+                                            ))
+                                            .unwrap()
+                                            .mention(),
+                                        score,
+                                    )
+                                    .as_str(),
+                                );
+                            })
+                            .for_each(drop);
+                        let _ = discord.send_message(message.channel_id, &top_report, "", false);
                     }
                 } else if text.contains(&current_question.answer) {
                     // ansver verify and update score
