@@ -51,6 +51,22 @@ fn next_question(r: Row) -> Question {
     )
 }
 
+fn get_score(db: &Connection, user: u64) -> (i64, usize, usize) {
+    let q = format!("SELECT * FROM scores WHERE user == {user}");
+    let data = db.prepare(&q).unwrap().into_iter().last().unwrap().unwrap();
+    let score = data.read::<i64, _>("score");
+    let mut all_scores = db
+        .prepare("SELECT score FROM scores")
+        .unwrap()
+        .into_iter()
+        .map(|r| r.unwrap().read::<i64, _>("score"))
+        .collect::<Vec<i64>>();
+    all_scores
+        .sort();
+    let standing = all_scores.iter().position(|n| *n == score).unwrap() + 1;
+    (score, standing, all_scores.len())
+}
+
 fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
     let current = format!("SELECT * FROM scores WHERE user == {user}");
     let ignore_if_exist = format!("INSERT OR IGNORE INTO scores (user, score) VALUES ({user}, 0)");
@@ -139,7 +155,7 @@ fn main() {
                             "",
                             false,
                         );
-                    } else if text.trim().to_lowercase() == "!підказка" {
+                    } else if text == "!підказка" || text == "!хінт" {
                         let _ = discord.send_message(
                             message.channel_id,
                             &current_question
@@ -153,6 +169,21 @@ fn main() {
                             "",
                             false,
                         );
+                    } else if text == "!рейтинг" {
+                        let (score, standing, total) = get_score(&db, message.author.id.0);
+                        let _ = discord.send_message(
+                            message.channel_id,
+                            &format!(
+                                "{} має {} очок і є {} зі {}",
+                                message.author.mention(),
+                                score,
+                                standing,
+                                total
+                            ),
+                            "",
+                            false,
+                        );
+                    } else if text == "!топ" {
                     }
                 } else if text.contains(&current_question.answer) {
                     // ansver verify and update score
