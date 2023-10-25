@@ -62,6 +62,7 @@ fn get_score(db: &Connection, user: u64) -> (i64, usize, usize) {
             .map(|r| r.unwrap().read::<i64, _>("score"))
             .collect::<Vec<i64>>();
         all_scores.sort();
+        all_scores.reverse();
         let standing = all_scores.iter().position(|n| *n == score).unwrap() + 1;
         (score, standing, all_scores.len())
     } else {
