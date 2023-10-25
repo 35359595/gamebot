@@ -178,7 +178,10 @@ fn main() {
                             .last()
                             .unwrap()
                             .to_string();
-                        hint.push_str(&str::repeat("◾", current_question.answer.len() - 2));
+                        hint.push_str(&str::repeat(
+                            "◾",
+                            current_question.answer.chars().count() - 2,
+                        ));
                         hint.push(current_question.answer.chars().last().unwrap());
                         let _ = discord.send_message(message.channel_id, &hint, "", false);
                     } else if text == "!рейтинг" {
