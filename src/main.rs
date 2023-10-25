@@ -1,5 +1,6 @@
 extern crate discord;
 extern crate rand;
+extern crate regex;
 extern crate sqlite;
 
 use discord::{
@@ -7,6 +8,7 @@ use discord::{
     Discord,
 };
 use rand::{prelude::*, thread_rng};
+use regex::Regex;
 use sqlite::{Connection, Row};
 use std::{env, fmt::Display};
 
@@ -14,6 +16,7 @@ struct Question {
     question: String,
     answer: String,
     score: i64,
+    bold: Regex,
 }
 
 impl Question {
@@ -22,6 +25,7 @@ impl Question {
             question,
             answer,
             score,
+            bold: Regex::new(r"(\[B\])|(\[\/B])").unwrap(),
         }
     }
 }
@@ -30,7 +34,7 @@ impl Display for Question {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
             "{} ({} літер) [+{}]",
-            self.question,
+            self.bold.replace_all(&self.question, "**"),
             self.answer.chars().into_iter().size_hint().0,
             self.score
         ))
@@ -117,7 +121,7 @@ fn main() {
                     if text == "!next" || text == "!далі" || text == "!відповідь" {
                         let _ = discord.send_message(
                             message.channel_id,
-                            &current_question.to_string(),
+                            &current_question.answer,
                             "",
                             false,
                         );
@@ -189,4 +193,11 @@ fn main() {
             Err(err) => println!("Receive error: {:?}", err),
         }
     }
+}
+
+#[test]
+fn bold_test() {
+    let r = Regex::new(r"(\[B\])|(\[\/B])").unwrap();
+    let res = r.replace_all("Те саме, що [B]заванта́жувати[/B]", "**");
+    assert_eq!(res, "Те саме, що **заванта́жувати**")
 }

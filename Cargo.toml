@@ -10,3 +10,4 @@ edition = "2021"
 discord = { git = "https://github.com/SpaceManiac/discord-rs" }
 sqlite = "^0.31"
 rand = "^0.8"
+regex = "^1"
