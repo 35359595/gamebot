@@ -170,19 +170,16 @@ fn main() {
                             false,
                         );
                     } else if text == "!підказка" || text == "!хінт" {
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &current_question
-                                .answer
-                                .chars()
-                                .into_iter()
-                                .rev()
-                                .last()
-                                .unwrap()
-                                .to_string(),
-                            "",
-                            false,
-                        );
+                        let mut hint = current_question
+                            .answer
+                            .chars()
+                            .into_iter()
+                            .rev()
+                            .last()
+                            .unwrap()
+                            .to_string();
+                        hint.push_str(&str::repeat("◾", current_question.answer.len() - 1));
+                        let _ = discord.send_message(message.channel_id, &hint, "", false);
                     } else if text == "!рейтинг" {
                         let (score, standing, total) = get_score(&db, message.author.id.0);
                         let _ = discord.send_message(
