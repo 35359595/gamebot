@@ -43,7 +43,6 @@ impl Display for Question {
 
 fn next_question(r: &Row) -> Question {
     let new_answer = r.read::<&str, _>("word").replace(|c: char| c == '\"', "");
-    println!("{new_answer}");
     Question::new(
         r.read::<&str, _>("interpretation").to_string(),
         new_answer,
@@ -116,18 +115,19 @@ fn main() {
 
     // Verb selector
     const QUERY: &str =
-        "SELECT * FROM wlist WHERE interpretation IS NOT NULL AND word NOT LIKE '(%)'";
+        "SELECT * FROM wlist WHERE interpretation IS NOT NULL AND word NOT LIKE '(%)' AND word NOT LIKE 'Te саме%'";
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
     // Create if not present `score` table
     let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
-    let mut data: Vec<Row> = db
+    let mut data: Vec<Question> = db
         .prepare(QUERY)
         .unwrap()
         .into_iter()
-        .map(|row| row.unwrap())
+        .map(|row| next_question(&row.unwrap()))
         .collect();
+    println!("Loaded {} questions!", { data.len() });
 
     // RNG
     let mut rng = thread_rng();
@@ -140,7 +140,7 @@ fn main() {
     // Establish and use a websocket connection
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
-    let mut current_question = next_question(data.choose(&mut rng).unwrap());
+    let mut current_question = data.choose(&mut rng).expect("no more questions?");
 
     loop {
         match connection.recv_event() {
@@ -159,7 +159,7 @@ fn main() {
                             "",
                             false,
                         );
-                        current_question = next_question(data.choose(&mut rng).unwrap());
+                        current_question = data.choose(&mut rng).expect("no more questions?");
                         let _ = discord.send_message(
                             message.channel_id,
                             &current_question.to_string(),
@@ -265,7 +265,7 @@ fn main() {
                         "",
                         false,
                     );
-                    current_question = next_question(data.choose(&mut rng).unwrap());
+                    current_question = data.choose(&mut rng).unwrap();
                     let _ = discord.send_message(
                         message.channel_id,
                         &current_question.to_string(),
