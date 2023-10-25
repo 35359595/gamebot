@@ -7,7 +7,7 @@ use discord::{
     model::{Event, ReactionEmoji},
     Discord,
 };
-use rand::{prelude::*, thread_rng};
+use rand::{seq::SliceRandom, thread_rng};
 use regex::Regex;
 use sqlite::{Connection, Row};
 use std::{env, fmt::Display};
@@ -41,7 +41,7 @@ impl Display for Question {
     }
 }
 
-fn next_question(r: Row) -> Question {
+fn next_question(r: &Row) -> Question {
     let new_answer = r.read::<&str, _>("word").replace(|c: char| c == '\"', "");
     println!("{new_answer}");
     Question::new(
@@ -140,7 +140,7 @@ fn main() {
     // Establish and use a websocket connection
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
-    let mut current_question = next_question(data.pop().unwrap());
+    let mut current_question = next_question(data.choose(&mut rng).unwrap());
 
     loop {
         match connection.recv_event() {
@@ -159,7 +159,7 @@ fn main() {
                             "",
                             false,
                         );
-                        current_question = next_question(data.pop().unwrap());
+                        current_question = next_question(data.choose(&mut rng).unwrap());
                         let _ = discord.send_message(
                             message.channel_id,
                             &current_question.to_string(),
@@ -265,7 +265,7 @@ fn main() {
                         "",
                         false,
                     );
-                    current_question = next_question(data.pop().unwrap());
+                    current_question = next_question(data.choose(&mut rng).unwrap());
                     let _ = discord.send_message(
                         message.channel_id,
                         &current_question.to_string(),
