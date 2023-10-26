@@ -101,6 +101,20 @@ fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
     total_score
 }
 
+fn produce_hint(q: &Question) -> String {
+    let mut hint = q
+        .answer
+        .chars()
+        .into_iter()
+        .rev()
+        .last()
+        .unwrap()
+        .to_string();
+    hint.push_str(&str::repeat("◾", q.answer.chars().count() - 2));
+    hint.push(q.answer.chars().last().unwrap());
+    hint
+}
+
 fn main() {
     println!("Opening DB");
     let mut db_path = env::var("CARGO_MANIFEST_DIR").unwrap_or(
@@ -144,6 +158,23 @@ fn main() {
 
     loop {
         match connection.recv_event() {
+            Ok(Event::ReactionAdd(reaction))
+                if reaction.emoji.eq(&ReactionEmoji::Unicode("❓".into())) =>
+            {
+                let target = discord
+                    .get_message(reaction.channel_id, reaction.message_id)
+                    .unwrap();
+                if target.author.id.0 == 1165155849409405020 {
+                    discord
+                        .send_message(
+                            reaction.channel_id,
+                            &produce_hint(&current_question),
+                            "",
+                            false,
+                        )
+                        .unwrap();
+                }
+            }
             Ok(Event::MessageCreate(message)) => {
                 let text = message.content.to_owned().trim().to_lowercase();
                 println!(
@@ -174,20 +205,12 @@ fn main() {
                             false,
                         );
                     } else if text == "!підказка" || text == "!хінт" {
-                        let mut hint = current_question
-                            .answer
-                            .chars()
-                            .into_iter()
-                            .rev()
-                            .last()
-                            .unwrap()
-                            .to_string();
-                        hint.push_str(&str::repeat(
-                            "◾",
-                            current_question.answer.chars().count() - 2,
-                        ));
-                        hint.push(current_question.answer.chars().last().unwrap());
-                        let _ = discord.send_message(message.channel_id, &hint, "", false);
+                        let _ = discord.send_message(
+                            message.channel_id,
+                            &produce_hint(&current_question),
+                            "",
+                            false,
+                        );
                     } else if text == "!рейтинг" {
                         let (score, standing, total) = get_score(&db, message.author.id.0);
                         if score == 0 {
@@ -240,9 +263,9 @@ fn main() {
                             "Відгадати слово за визначеням з тлумачного словника Української мови. Реєстр і навколишній текст не враховуються.\n\
 Рейтинг [вказаний в квадратних дужках після кожного питання] додається гравцю за вірну відповідь і є вищий у рідше вживаних слів.\n\
 **!?** | **!help** - інформація і команди;\n\
-**!next** | **!далі** | **!відповідь** - відповідь на поточне пиатння і нове питання;\n\
+**!next** | **!далі** | **!відповідь** | ⏭️  - відповідь на поточне пиатння і нове питання;\n\
 **!q** | **!питання** | **!п** - повторити поточне питання;\n\
-**!підказка** | **!хінт** - відобразити першу літеру відповіді;\n\
+**!підказка** | **!хінт** | реакція ❓ до питання - відобразити першу літеру відповіді;\n\
 **!топ** - відобразити топ 10 гравців з найвищим рейтингом;\n\
 **!рейтинг** - відобразити Ваш рейтинг;",
                             "",
