@@ -176,7 +176,12 @@ fn main() {
                 }
             }
             Ok(Event::MessageCreate(message)) => {
-                let text = message.content.to_owned().trim().to_lowercase();
+                let text = message
+                    .content
+                    .to_owned()
+                    .trim()
+                    .replace(' ', "")
+                    .to_lowercase();
                 println!(
                     "{}: {} says: {}",
                     message.timestamp, message.author.name, text
