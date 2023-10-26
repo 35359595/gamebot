@@ -129,7 +129,7 @@ fn main() {
 
     // Verb selector
     const QUERY: &str =
-        "SELECT * FROM wlist WHERE interpretation IS NOT NULL AND word NOT LIKE '(%)' AND word NOT LIKE 'Te саме%'";
+        "SELECT id_syn, word, interpretation FROM wlist WHERE interpretation IS NOT NULL AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
@@ -182,10 +182,6 @@ fn main() {
                     .trim()
                     .replace(' ', "")
                     .to_lowercase();
-                println!(
-                    "{}: {} says: {}",
-                    message.timestamp, message.author.name, text
-                );
                 // service commands
                 if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
                     if text == "!next" || text == "!далі" || text == "!відповідь" {
@@ -278,6 +274,10 @@ fn main() {
                         );
                     }
                 } else if text.contains(&current_question.answer) {
+                    println!(
+                        "{}: {} says: {}",
+                        message.timestamp, message.author.name, text
+                    );
                     // ansver verify and update score
                     let new_score =
                         increment_score(&db, message.author.id.0, current_question.score);
