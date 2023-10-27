@@ -4,7 +4,7 @@ extern crate regex;
 extern crate sqlite;
 
 use discord::{
-    model::{Event, ReactionEmoji},
+    model::{Channel, Event, ReactionEmoji},
     Discord,
 };
 use rand::{seq::SliceRandom, thread_rng};
@@ -182,7 +182,10 @@ fn main() {
                     .trim()
                     .replace(' ', "")
                     .to_lowercase();
-                // service commands
+                let lang = match discord.get_channel(message.channel_id).unwrap() {
+                    Channel::Public(c) => c.name,
+                    _ => String::default(),
+                }; // service commands
                 if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
                     if text == "!next" || text == "!далі" || text == "!відповідь" {
                         let _ = discord.send_message(
