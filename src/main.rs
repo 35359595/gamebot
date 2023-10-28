@@ -204,91 +204,104 @@ fn main() {
                     .trim()
                     .replace(' ', "")
                     .to_lowercase();
-                let lang = match discord.get_channel(message.channel_id).unwrap() {
-                    Channel::Public(c) => match c.name {
+                let channel = discord.get_channel(message.channel_id).unwrap();
+                let lang = match &channel {
+                    Channel::Public(c) => match &c.name {
                         n if n.contains("uk") => Lang::Uk,
                         n if n.contains("en") => Lang::En,
                         _ => Lang::Uknown,
                     },
                     _ => Lang::Uknown,
                 }; // service commands
-                if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
-                    if text == "!next" || text == "!далі" || text == "!відповідь" {
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &current_question.answer,
-                            "",
-                            false,
-                        );
-                        current_question = data_uk.choose(&mut rng).expect("no more questions?");
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &current_question.to_string(),
-                            "",
-                            false,
-                        );
-                    } else if text == "!q" || text == "!питання" || text == "!п" {
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &current_question.to_string(),
-                            "",
-                            false,
-                        );
-                    } else if text == "!підказка" || text == "!хінт" {
-                        let _ = discord.send_message(
-                            message.channel_id,
-                            &produce_hint(&current_question),
-                            "",
-                            false,
-                        );
-                    } else if text == "!рейтинг" {
-                        let (score, standing, total) = get_score(&db, message.author.id.0);
-                        if score == 0 {
-                            let _ = discord.send_message(
-                                message.channel_id,
-                                &format!("{} нічого ще не відгадано...", message.author.mention()),
-                                "",
-                                false,
-                            );
-                        } else {
-                            let _ = discord.send_message(
-                                message.channel_id,
-                                &format!(
-                                    "{} має {} очок і є {} зі {}",
-                                    message.author.mention(),
-                                    score,
-                                    standing,
-                                    total
-                                ),
-                                "",
-                                false,
-                            );
-                        }
-                    } else if text == "!топ" {
-                        let top = get_top(&db);
-                        let mut top_report = String::default();
-                        top.into_iter()
-                            .enumerate()
-                            .map(|(id, (user, score))| {
-                                top_report.push_str(
-                                    format!(
-                                        "{}    |    {}    |    {}\n",
-                                        id + 1,
-                                        discord
-                                            .get_user(discord::model::UserId(
-                                                user.try_into().unwrap()
-                                            ))
-                                            .unwrap()
-                                            .mention(),
-                                        score,
-                                    )
-                                    .as_str(),
+                match lang {
+                    Lang::Uk => {
+                        if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
+                            if text == "!next" || text == "!далі" || text == "!відповідь"
+                            {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_question.answer,
+                                    "",
+                                    false,
                                 );
-                            })
-                            .for_each(drop);
-                        let _ = discord.send_message(message.channel_id, &top_report, "", false);
-                    } else if text == "!?" || text == "!help" {
-                        let _ = discord.send_message(
+                                current_question =
+                                    data_uk.choose(&mut rng).expect("no more questions?");
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_question.to_string(),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!q" || text == "!питання" || text == "!п" {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_question.to_string(),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!підказка" || text == "!хінт" {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &produce_hint(&current_question),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!рейтинг" {
+                                let (score, standing, total) = get_score(&db, message.author.id.0);
+                                if score == 0 {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &format!(
+                                            "{} нічого ще не відгадано...",
+                                            message.author.mention()
+                                        ),
+                                        "",
+                                        false,
+                                    );
+                                } else {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &format!(
+                                            "{} має {} очок і є {} зі {}",
+                                            message.author.mention(),
+                                            score,
+                                            standing,
+                                            total
+                                        ),
+                                        "",
+                                        false,
+                                    );
+                                }
+                            } else if text == "!топ" {
+                                let top = get_top(&db);
+                                let mut top_report = String::default();
+                                top.into_iter()
+                                    .enumerate()
+                                    .map(|(id, (user, score))| {
+                                        top_report.push_str(
+                                            format!(
+                                                "{}    |    {}    |    {}\n",
+                                                id + 1,
+                                                discord
+                                                    .get_user(discord::model::UserId(
+                                                        user.try_into().unwrap()
+                                                    ))
+                                                    .unwrap()
+                                                    .mention(),
+                                                score,
+                                            )
+                                            .as_str(),
+                                        );
+                                    })
+                                    .for_each(drop);
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &top_report,
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!?" || text == "!help" {
+                                let _ = discord.send_message(
                             message.channel_id,
                             &format!("Відгадати слово за визначеням з тлумачного словника Української мови. Реєстр і навколишній текст не враховуються.\n\
 Рейтинг [вказаний в квадратних дужках після кожного питання] додається гравцю за вірну відповідь і є вищий у рідше вживаних слів.\n\
@@ -302,40 +315,46 @@ fn main() {
                             "",
                             false,
                         );
+                            }
+                        } else if text.contains(&current_question.answer) {
+                            println!(
+                                "{}: {} says: {}",
+                                message.timestamp, message.author.name, text
+                            );
+                            // ansver verify and update score
+                            let new_score =
+                                increment_score(&db, message.author.id.0, current_question.score);
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                format!(
+                                    "Вірно {}. Відповідь {}. Загальний рейтинг: {}",
+                                    message.author.mention(),
+                                    current_question.answer,
+                                    new_score
+                                )
+                                .as_str(),
+                                "",
+                                false,
+                            );
+                            current_question = data_uk.choose(&mut rng).unwrap();
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                &current_question.to_string(),
+                                "",
+                                false,
+                            );
+                        } else if !message.author.bot {
+                            let _ = discord.add_reaction(
+                                message.channel_id,
+                                message.id,
+                                ReactionEmoji::Unicode("➖".to_string()),
+                            );
+                        }
                     }
-                } else if text.contains(&current_question.answer) {
-                    println!(
-                        "{}: {} says: {}",
-                        message.timestamp, message.author.name, text
-                    );
-                    // ansver verify and update score
-                    let new_score =
-                        increment_score(&db, message.author.id.0, current_question.score);
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        format!(
-                            "Вірно {}. Відповідь {}. Загальний рейтинг: {}",
-                            message.author.mention(),
-                            current_question.answer,
-                            new_score
-                        )
-                        .as_str(),
-                        "",
-                        false,
-                    );
-                    current_question = data_uk.choose(&mut rng).unwrap();
-                    let _ = discord.send_message(
-                        message.channel_id,
-                        &current_question.to_string(),
-                        "",
-                        false,
-                    );
-                } else if !message.author.bot {
-                    let _ = discord.add_reaction(
-                        message.channel_id,
-                        message.id,
-                        ReactionEmoji::Unicode("➖".to_string()),
-                    );
+                    Lang::En => {
+                        println!("Eng channel message");
+                    }
+                    Lang::Uknown => println!("Unknown channel message {:?}", channel),
                 }
             }
             Ok(_) => {}
