@@ -7,7 +7,7 @@ use discord::{
     model::{Channel, Event, ReactionEmoji},
     Discord,
 };
-use rand::{seq::SliceRandom, thread_rng};
+use rand::{seq::SliceRandom, thread_rng, Rng};
 use regex::Regex;
 use sqlite::{Connection, Row};
 use std::{env, fmt::Display};
@@ -16,6 +16,10 @@ enum Lang {
     Uk,
     En,
     Uknown,
+}
+
+trait IsQuestion {
+    fn get_answer(&self) -> &str;
 }
 
 struct Question {
@@ -44,6 +48,49 @@ impl Display for Question {
             self.answer.chars().count(),
             self.score
         ))
+    }
+}
+
+impl IsQuestion for Question {
+    fn get_answer(&self) -> &str {
+        &self.answer
+    }
+}
+
+struct EnQuestion {
+    question: String,
+    answer: String,
+    score: i64,
+}
+
+impl EnQuestion {
+    fn new(r: &Row) -> Self {
+        let mut rng = thread_rng();
+        let question = r.read::<&str, _>("definition").to_string();
+        let answer = r.read::<&str, _>("word").to_string();
+        let score = rng.gen_range(1..5);
+        EnQuestion {
+            question,
+            answer,
+            score,
+        }
+    }
+}
+
+impl Display for EnQuestion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{} ({} letters) [+{} score]",
+            self.question,
+            self.answer.chars().count(),
+            self.score
+        ))
+    }
+}
+
+impl IsQuestion for EnQuestion {
+    fn get_answer(&self) -> &str {
+        &self.answer
     }
 }
 
@@ -107,17 +154,14 @@ fn increment_score(db: &Connection, user: u64, score: i64) -> i64 {
     total_score
 }
 
-fn produce_hint(q: &Question) -> String {
-    let mut hint = q
-        .answer
-        .chars()
-        .into_iter()
-        .rev()
-        .last()
-        .unwrap()
-        .to_string();
-    hint.push_str(&str::repeat("◾", q.answer.chars().count() - 2));
-    hint.push(q.answer.chars().last().unwrap());
+fn produce_hint<T>(q: &T) -> String
+where
+    T: IsQuestion,
+{
+    let answer = q.get_answer().chars();
+    let mut hint = answer.clone().into_iter().rev().last().unwrap().to_string();
+    hint.push_str(&str::repeat("◾", answer.clone().count() - 2));
+    hint.push(answer.last().unwrap());
     hint
 }
 
@@ -156,11 +200,11 @@ fn main() {
     // ENG db
     let en_db = sqlite::open(&en_db_path).expect("En db expected");
     let _ = en_db.execute(SCORE_TABLE_CREATE).unwrap();
-    let mut data_en: Vec<Row> = en_db
+    let mut data_en: Vec<EnQuestion> = en_db
         .prepare(QUERY_EN)
         .unwrap()
         .into_iter()
-        .map(|row| row.unwrap())
+        .map(|row| EnQuestion::new(&row.unwrap()))
         .collect();
     println!("Loaded English {} questions!", data_en.len());
 
@@ -176,7 +220,8 @@ fn main() {
     // Establish and use a websocket connection
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
-    let mut current_question = data_uk.choose(&mut rng).expect("no more questions?");
+    let mut current_question = data_uk.choose(&mut rng).expect("no more uk questions?");
+    let mut current_en_question = data_en.choose(&mut rng).expect("no more eng questions");
 
     loop {
         match connection.recv_event() {
@@ -190,7 +235,7 @@ fn main() {
                     discord
                         .send_message(
                             reaction.channel_id,
-                            &produce_hint(&current_question),
+                            &produce_hint(current_question),
                             "",
                             false,
                         )
@@ -242,7 +287,7 @@ fn main() {
                             } else if text == "!підказка" || text == "!хінт" {
                                 let _ = discord.send_message(
                                     message.channel_id,
-                                    &produce_hint(&current_question),
+                                    &produce_hint(current_question),
                                     "",
                                     false,
                                 );
@@ -352,7 +397,143 @@ fn main() {
                         }
                     }
                     Lang::En => {
-                        println!("Eng channel message");
+                        if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
+                            if text == "!next" || text == "!answer" {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_en_question.answer,
+                                    "",
+                                    false,
+                                );
+                                current_en_question =
+                                    data_en.choose(&mut rng).expect("no more questions?");
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_en_question.to_string(),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!q" || text == "!question" {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &current_en_question.to_string(),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!hint" {
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &produce_hint(current_en_question),
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!score" {
+                                let (score, standing, total) = get_score(&db, message.author.id.0);
+                                if score == 0 {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &format!(
+                                            "{} has not scored yet...",
+                                            message.author.mention()
+                                        ),
+                                        "",
+                                        false,
+                                    );
+                                } else {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &format!(
+                                            "{} have {} point and is {} out of {}",
+                                            message.author.mention(),
+                                            score,
+                                            standing,
+                                            total
+                                        ),
+                                        "",
+                                        false,
+                                    );
+                                }
+                            } else if text == "!top" {
+                                let top = get_top(&db);
+                                let mut top_report = String::default();
+                                top.into_iter()
+                                    .enumerate()
+                                    .map(|(id, (user, score))| {
+                                        top_report.push_str(
+                                            format!(
+                                                "{}    |    {}    |    {}\n",
+                                                id + 1,
+                                                discord
+                                                    .get_user(discord::model::UserId(
+                                                        user.try_into().unwrap()
+                                                    ))
+                                                    .unwrap()
+                                                    .mention(),
+                                                score,
+                                            )
+                                            .as_str(),
+                                        );
+                                    })
+                                    .for_each(drop);
+                                let _ = discord.send_message(
+                                    message.channel_id,
+                                    &top_report,
+                                    "",
+                                    false,
+                                );
+                            } else if text == "!?" || text == "!help" {
+                                let _ = discord.send_message(
+                            message.channel_id,
+                            &format!("Guess the word by it's definition. Answer must include exact word. Register and surrounding text are ignored.\n\
+Each question have a score [in square braces], which on correct answer is added to first player's tally.\n\
+**!?** | **!help** - info and commands;\n\
+**!next** | **!answer** - shows answer to current question and provides a new one;\n\
+**!q** | **!question** - repeat current question;\n\
+**!hint** | react ❓ under the question - produces hint with first and last letters of the answer word;\n\
+**!top** - top 10 score standings;\n\
+**!score** - display Your score;\n\
+Version **{}**. Total words count: **{}**", env!("CARGO_PKG_VERSION"), data_en.len()),
+                            "",
+                            false,
+                        );
+                            }
+                        } else if text.contains(&current_en_question.answer) {
+                            println!(
+                                "{}: {} says: {}",
+                                message.timestamp, message.author.name, text
+                            );
+                            // ansver verify and update score
+                            let new_score = increment_score(
+                                &db,
+                                message.author.id.0,
+                                current_en_question.score,
+                            );
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                format!(
+                                    "Correct {}. Answer is **{}**. Your total score: {}",
+                                    message.author.mention(),
+                                    current_en_question.answer,
+                                    new_score
+                                )
+                                .as_str(),
+                                "",
+                                false,
+                            );
+                            current_en_question = data_en.choose(&mut rng).unwrap();
+                            let _ = discord.send_message(
+                                message.channel_id,
+                                &current_en_question.to_string(),
+                                "",
+                                false,
+                            );
+                        } else if !message.author.bot {
+                            let _ = discord.add_reaction(
+                                message.channel_id,
+                                message.id,
+                                ReactionEmoji::Unicode("➖".to_string()),
+                            );
+                        }
                     }
                     Lang::Uknown => println!("Unknown channel message {:?}", channel),
                 }
