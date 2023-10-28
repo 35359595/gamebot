@@ -12,6 +12,12 @@ use regex::Regex;
 use sqlite::{Connection, Row};
 use std::{env, fmt::Display};
 
+enum Lang {
+    Uk,
+    En,
+    Uknown,
+}
+
 struct Question {
     question: String,
     answer: String,
@@ -124,28 +130,44 @@ fn main() {
             .into_string()
             .unwrap_or(".".into()),
     );
+    let mut en_db_path = db_path.clone();
     db_path.push_str("/db/synsets_ua.db");
+    en_db_path.push_str("/db/synsets_en.db");
     println!("DB path: {}", &db_path);
+    println!("En DB path: {}", &en_db_path);
 
     // Verb selector
-    const QUERY: &str =
+    const QUERY_UK: &str =
         "SELECT id_syn, word, interpretation FROM wlist WHERE interpretation IS NOT NULL AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
+    const QUERY_EN: &str = "SELECT * FROM words WHERE definition IS NOT NULL"; // AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
     let db = sqlite::open(&db_path).expect("db expected");
     // Create if not present `score` table
     let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
-    let mut data: Vec<Question> = db
-        .prepare(QUERY)
+    let mut data_uk: Vec<Question> = db
+        .prepare(QUERY_UK)
         .unwrap()
         .into_iter()
         .map(|row| next_question(&row.unwrap()))
         .collect();
-    println!("Loaded {} questions!", { data.len() });
+    println!("Loaded Ukrainian {} questions!", data_uk.len());
+
+    // ENG db
+    let en_db = sqlite::open(&en_db_path).expect("En db expected");
+    let _ = en_db.execute(SCORE_TABLE_CREATE).unwrap();
+    let mut data_en: Vec<Row> = en_db
+        .prepare(QUERY_EN)
+        .unwrap()
+        .into_iter()
+        .map(|row| row.unwrap())
+        .collect();
+    println!("Loaded English {} questions!", data_en.len());
 
     // RNG
     let mut rng = thread_rng();
-    data.shuffle(&mut rng);
+    data_uk.shuffle(&mut rng);
+    data_en.shuffle(&mut rng);
 
     // Log in to Discord using a bot token from the environment
     let discord = Discord::from_bot_token(&env::var("DISCORD_TOKEN").expect("Expected token"))
@@ -154,7 +176,7 @@ fn main() {
     // Establish and use a websocket connection
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
-    let mut current_question = data.choose(&mut rng).expect("no more questions?");
+    let mut current_question = data_uk.choose(&mut rng).expect("no more questions?");
 
     loop {
         match connection.recv_event() {
@@ -183,8 +205,12 @@ fn main() {
                     .replace(' ', "")
                     .to_lowercase();
                 let lang = match discord.get_channel(message.channel_id).unwrap() {
-                    Channel::Public(c) => c.name,
-                    _ => String::default(),
+                    Channel::Public(c) => match c.name {
+                        n if n.contains("uk") => Lang::Uk,
+                        n if n.contains("en") => Lang::En,
+                        _ => Lang::Uknown,
+                    },
+                    _ => Lang::Uknown,
                 }; // service commands
                 if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
                     if text == "!next" || text == "!далі" || text == "!відповідь" {
@@ -194,7 +220,7 @@ fn main() {
                             "",
                             false,
                         );
-                        current_question = data.choose(&mut rng).expect("no more questions?");
+                        current_question = data_uk.choose(&mut rng).expect("no more questions?");
                         let _ = discord.send_message(
                             message.channel_id,
                             &current_question.to_string(),
@@ -272,7 +298,7 @@ fn main() {
 **!підказка** | **!хінт** | реакція ❓ до питання - відобразити першу літеру відповіді;\n\
 **!топ** - відобразити топ 10 гравців з найвищим рейтингом;\n\
 **!рейтинг** - відобразити Ваш рейтинг;\n\
-Версія **{}**. Слів в словнику: **{}**", env!("CARGO_PKG_VERSION"), data.len()),
+Версія **{}**. Слів в словнику: **{}**", env!("CARGO_PKG_VERSION"), data_uk.len()),
                             "",
                             false,
                         );
@@ -297,7 +323,7 @@ fn main() {
                         "",
                         false,
                     );
-                    current_question = data.choose(&mut rng).unwrap();
+                    current_question = data_uk.choose(&mut rng).unwrap();
                     let _ = discord.send_message(
                         message.channel_id,
                         &current_question.to_string(),
