@@ -43,7 +43,7 @@ impl Question {
 impl Display for Question {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
-            "{} ({} літер) [+{}]",
+            "**{}** ({} літер) [+{}]",
             self.bold.replace_all(&self.question, "**"),
             self.answer.chars().count(),
             self.score
@@ -80,7 +80,7 @@ impl EnQuestion {
 impl Display for EnQuestion {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
-            "{} ({} letters) [+{} score]",
+            "**{}** ({} letters) [{} point(s)]",
             self.question,
             self.answer.chars().count(),
             self.score
