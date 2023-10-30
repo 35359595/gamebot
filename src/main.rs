@@ -235,18 +235,42 @@ fn main() {
             Ok(Event::ReactionAdd(reaction))
                 if reaction.emoji.eq(&ReactionEmoji::Unicode("❓".into())) =>
             {
+                let channel = discord.get_channel(reaction.channel_id).unwrap();
+                let lang = match &channel {
+                    Channel::Public(c) => match &c.name {
+                        n if n.contains("uk") => Lang::Uk,
+                        n if n.contains("en") => Lang::En,
+                        _ => Lang::Uknown,
+                    },
+                    _ => Lang::Uknown,
+                };
                 let target = discord
                     .get_message(reaction.channel_id, reaction.message_id)
                     .unwrap();
                 if target.author.id.0 == 1165155849409405020 {
-                    discord
-                        .send_message(
-                            reaction.channel_id,
-                            &produce_hint(current_question),
-                            "",
-                            false,
-                        )
-                        .unwrap();
+                    match lang {
+                        Lang::Uk => drop(
+                            discord
+                                .send_message(
+                                    reaction.channel_id,
+                                    &produce_hint(current_question),
+                                    "",
+                                    false,
+                                )
+                                .unwrap(),
+                        ),
+                        Lang::En => drop(
+                            discord
+                                .send_message(
+                                    reaction.channel_id,
+                                    &produce_hint(current_en_question),
+                                    "",
+                                    false,
+                                )
+                                .unwrap(),
+                        ),
+                        _ => println!("Reaction to unknown channel: {:?}", channel),
+                    }
                 }
             }
             Ok(Event::MessageCreate(message)) => {
@@ -264,7 +288,8 @@ fn main() {
                         _ => Lang::Uknown,
                     },
                     _ => Lang::Uknown,
-                }; // service commands
+                };
+                // service commands
                 match lang {
                     Lang::Uk => {
                         if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
@@ -404,7 +429,7 @@ fn main() {
                         }
                     }
                     Lang::En => {
-                        if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
+                        if text.starts_with('!') {
                             if text == "!next" || text == "!answer" {
                                 let _ = discord.send_message(
                                     message.channel_id,
@@ -505,10 +530,6 @@ Version **{}**. Total words count: **{}**", env!("CARGO_PKG_VERSION"), data_en.l
                         );
                             }
                         } else if text.contains(&current_en_question.answer) {
-                            println!(
-                                "{}: {} says: {}",
-                                message.timestamp, message.author.name, text
-                            );
                             // ansver verify and update score
                             let new_score = increment_score(
                                 &db,
