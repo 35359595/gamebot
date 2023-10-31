@@ -66,17 +66,23 @@ struct EnQuestion {
 impl EnQuestion {
     fn new(r: &Row) -> Self {
         let mut rng = thread_rng();
-        let mut question = r
+        let mut question: String = r
             .read::<&str, _>("definition")
-            .trim_matches('\n')
-            .trim_matches('\r');
+            .chars()
+            .filter(|c| c.is_alphanumeric() || c.eq(&' '))
+            .collect();
+        question = question
+            .split(' ')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
         if question.contains('.') {
-            question = question.split_once('.').unwrap().0 // first part before '.'
+            question = question.split_once('.').unwrap().0.to_string() // first part before '.'
         }
         let answer = r.read::<&str, _>("word").to_string().to_lowercase();
         let score = rng.gen_range(1..5);
         EnQuestion {
-            question: question.into(),
+            question,
             answer,
             score,
         }
