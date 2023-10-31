@@ -195,10 +195,13 @@ fn main() {
     // Verb selector
     const QUERY_UK: &str =
         "SELECT id_syn, word, interpretation FROM wlist WHERE interpretation IS NOT NULL AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
+
     const QUERY_EN: &str =
-        "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND LENGTH(definition) > 5 AND NOT instr(definition, word) > 1";
+        "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND LENGTH(definition) > 5 AND NOT instr(definition, word)";
+
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
+
     let db = sqlite::open(&db_path).expect("db expected");
     // Create if not present `score` table
     let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
