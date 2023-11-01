@@ -4,13 +4,15 @@ extern crate regex;
 extern crate sqlite;
 
 use discord::{
-    model::{Channel, Event, ReactionEmoji},
+    model::{Channel, Event, Message, ReactionEmoji},
     Discord,
 };
 use rand::{seq::SliceRandom, thread_rng, Rng};
 use regex::Regex;
 use sqlite::{Connection, Row};
-use std::{env, fmt::Display};
+use std::{env, fmt::Display, time::SystemTime};
+
+const MIN_PAUSE: u128 = 60_000; // 1 MIN between hints and next questions in millis
 
 enum Lang {
     Uk,
@@ -177,6 +179,14 @@ where
     hint
 }
 
+fn react_timer(message: &Message, discord: &Discord) {
+    drop(discord.add_reaction(
+        message.channel_id,
+        message.id,
+        ReactionEmoji::Unicode("⏱️".into()),
+    ));
+}
+
 fn main() {
     println!("Opening DB");
     let mut db_path = env::var("CARGO_MANIFEST_DIR").unwrap_or(
@@ -205,7 +215,7 @@ fn main() {
     // Length of `definition` is longer than 5 chars
     // `definition` does not contain `word` in it
     const QUERY_EN: &str =
-        "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND definition NOT LIKE 'See %' AND LENGTH(definition) > 5 AND NOT instr(definition, word)";
+        "SELECT word, definition, INSTR(definition, word) contains FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND definition NOT LIKE 'See %' AND LENGTH(definition) > 5 AND contains = 0";
 
     // Creates table `scores` with `user` and `score` rows if it does not yet exist
     const SCORE_TABLE_CREATE: &str =
@@ -246,8 +256,12 @@ fn main() {
     // Establish and use a websocket connection
     let (mut connection, _) = discord.connect().expect("connect failed");
     println!("Ready.");
-    let mut current_question = data_uk.choose(&mut rng).expect("no more uk questions?");
+    let mut current_question = data_uk.choose(&mut rng).expect("no more uk questions");
+    let mut uk_asked: SystemTime = SystemTime::now();
+    let mut uk_hinted = false;
     let mut current_en_question = data_en.choose(&mut rng).expect("no more eng questions");
+    let mut en_asked: SystemTime = SystemTime::now();
+    let mut en_hinted = false;
 
     loop {
         match connection.recv_event() {
@@ -268,26 +282,50 @@ fn main() {
                     .unwrap();
                 if target.author.id.0 == 1165155849409405020 {
                     match lang {
-                        Lang::Uk => drop(
-                            discord
-                                .send_message(
-                                    reaction.channel_id,
-                                    &produce_hint(current_question),
-                                    "",
-                                    false,
+                        Lang::Uk => {
+                            if !uk_hinted
+                                && SystemTime::now()
+                                    .duration_since(uk_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
+                            {
+                                uk_hinted = true;
+                                uk_asked = SystemTime::now();
+                                drop(
+                                    discord
+                                        .send_message(
+                                            reaction.channel_id,
+                                            &produce_hint(current_question),
+                                            "",
+                                            false,
+                                        )
+                                        .unwrap(),
+                                );
+                            }
+                        }
+                        Lang::En => {
+                            if !en_hinted
+                                && SystemTime::now()
+                                    .duration_since(en_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
+                            {
+                                en_hinted = true;
+                                en_asked = SystemTime::now();
+                                drop(
+                                    discord
+                                        .send_message(
+                                            reaction.channel_id,
+                                            &produce_hint(current_en_question),
+                                            "",
+                                            false,
+                                        )
+                                        .unwrap(),
                                 )
-                                .unwrap(),
-                        ),
-                        Lang::En => drop(
-                            discord
-                                .send_message(
-                                    reaction.channel_id,
-                                    &produce_hint(current_en_question),
-                                    "",
-                                    false,
-                                )
-                                .unwrap(),
-                        ),
+                            }
+                        }
                         _ => println!("Reaction to unknown channel: {:?}", channel),
                     }
                 }
@@ -311,8 +349,13 @@ fn main() {
                 // service commands
                 match lang {
                     Lang::Uk => {
-                        if text.chars().rev().last().is_some_and(|c| c.eq(&'!')) {
-                            if text == "!next" || text == "!далі" || text == "!відповідь"
+                        if text.starts_with("!") {
+                            if (text == "!next" || text == "!далі" || text == "!відповідь")
+                                && SystemTime::now()
+                                    .duration_since(uk_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
                             {
                                 let _ = discord.send_message(
                                     message.channel_id,
@@ -320,6 +363,9 @@ fn main() {
                                     "",
                                     false,
                                 );
+                                // reset ask time and hint
+                                uk_asked = SystemTime::now();
+                                uk_hinted = false;
                                 current_question =
                                     data_uk.choose(&mut rng).expect("no more questions?");
                                 let _ = discord.send_message(
@@ -335,13 +381,23 @@ fn main() {
                                     "",
                                     false,
                                 );
-                            } else if text == "!підказка" || text == "!хінт" {
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &produce_hint(current_question),
-                                    "",
-                                    false,
-                                );
+                            } else if (text == "!підказка" || text == "!хінт")
+                                && SystemTime::now()
+                                    .duration_since(uk_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
+                            {
+                                if !uk_hinted {
+                                    uk_hinted = true;
+                                    uk_asked = SystemTime::now();
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &produce_hint(current_question),
+                                        "",
+                                        false,
+                                    );
+                                }
                             } else if text == "!рейтинг" {
                                 let (score, standing, total) = get_score(&db, message.author.id.0);
                                 if score == 0 {
@@ -432,6 +488,9 @@ fn main() {
                                 "",
                                 false,
                             );
+                            // reset asked time and hinted
+                            uk_asked = SystemTime::now();
+                            uk_hinted = false;
                             current_question = data_uk.choose(&mut rng).unwrap();
                             let _ = discord.send_message(
                                 message.channel_id,
@@ -449,13 +508,21 @@ fn main() {
                     }
                     Lang::En => {
                         if text.starts_with('!') {
-                            if text == "!next" || text == "!answer" {
+                            if (text == "!next" || text == "!answer")
+                                && SystemTime::now()
+                                    .duration_since(en_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
+                            {
                                 let _ = discord.send_message(
                                     message.channel_id,
                                     &current_en_question.answer,
                                     "",
                                     false,
                                 );
+                                en_asked = SystemTime::now();
+                                en_hinted = false;
                                 current_en_question =
                                     data_en.choose(&mut rng).expect("no more questions?");
                                 let _ = discord.send_message(
@@ -471,13 +538,29 @@ fn main() {
                                     "",
                                     false,
                                 );
-                            } else if text == "!hint" {
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &produce_hint(current_en_question),
-                                    "",
-                                    false,
-                                );
+                            } else if text == "!hint"
+                                && SystemTime::now()
+                                    .duration_since(en_asked)
+                                    .unwrap()
+                                    .as_millis()
+                                    > MIN_PAUSE
+                            {
+                                if !en_hinted
+                                    && SystemTime::now()
+                                        .duration_since(en_asked)
+                                        .unwrap()
+                                        .as_millis()
+                                        > MIN_PAUSE
+                                {
+                                    en_hinted = true;
+                                    en_asked = SystemTime::now();
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &produce_hint(current_en_question),
+                                        "",
+                                        false,
+                                    );
+                                }
                             } else if text == "!score" {
                                 let (score, standing, total) = get_score(&db, message.author.id.0);
                                 if score == 0 {
@@ -555,6 +638,9 @@ Version **{}**. Total words count: **{}**", env!("CARGO_PKG_VERSION"), data_en.l
                                 message.author.id.0,
                                 current_en_question.score,
                             );
+                            // reset asked and hinted
+                            en_asked = SystemTime::now();
+                            en_hinted = false;
                             let _ = discord.send_message(
                                 message.channel_id,
                                 format!(
