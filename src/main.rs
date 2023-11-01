@@ -197,7 +197,7 @@ fn main() {
         "SELECT id_syn, word, interpretation FROM wlist WHERE interpretation IS NOT NULL AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
 
     const QUERY_EN: &str =
-        "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND LENGTH(definition) > 5 AND NOT instr(definition, word)";
+        "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND definition NOT LIKE 'See %' AND LENGTH(definition) > 5 AND NOT instr(definition, word)";
 
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
