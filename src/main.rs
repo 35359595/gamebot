@@ -193,15 +193,25 @@ fn main() {
     println!("En DB path: {}", &en_db_path);
 
     // Verb selector
+    // Not empty `interpretation`
+    // Not enclosed in '()' `interpretation`
+    // Not starting with 'Те саме що' `interpretation`
     const QUERY_UK: &str =
         "SELECT id_syn, word, interpretation FROM wlist WHERE interpretation IS NOT NULL AND interpretation NOT LIKE '(%)' AND interpretation NOT LIKE 'Te саме%'";
 
+    // Not null definition
+    // Not starting with 'of ' `definition`
+    // Not starting with 'See ' `definition`
+    // Length of `definition` is longer than 5 chars
+    // `definition` does not contain `word` in it
     const QUERY_EN: &str =
         "SELECT word, definition FROM words WHERE definition IS NOT NULL AND definition NOT LIKE 'of %' AND definition NOT LIKE 'See %' AND LENGTH(definition) > 5 AND NOT instr(definition, word)";
 
+    // Creates table `scores` with `user` and `score` rows if it does not yet exist
     const SCORE_TABLE_CREATE: &str =
         "CREATE TABLE IF NOT EXISTS scores (user INTEGER PRIMARY KEY UNIQUE, score INTEGER)";
 
+    // Open db file
     let db = sqlite::open(&db_path).expect("db expected");
     // Create if not present `score` table
     let _ = db.execute(SCORE_TABLE_CREATE).unwrap();
