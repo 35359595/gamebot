@@ -3,7 +3,7 @@ name = "gamebot"
 authors = ["Ivan Temchenko <https://github.com/35359595>"]
 description = "Discord words game bot"
 license = "EUPL-v1.3"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 
 [dependencies]
