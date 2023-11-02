@@ -187,6 +187,18 @@ fn react_timer(message: &Message, discord: &Discord) {
     ));
 }
 
+fn react_stop(message: &Message, discord: &Discord) {
+    drop(discord.add_reaction(
+        message.channel_id,
+        message.id,
+        ReactionEmoji::Unicode("🛑".into()),
+    ));
+}
+
+fn not_too_early(from: SystemTime) -> bool {
+    SystemTime::now().duration_since(from).unwrap().as_millis() > MIN_PAUSE
+}
+
 fn main() {
     println!("Opening DB");
     let mut db_path = env::var("CARGO_MANIFEST_DIR").unwrap_or(
@@ -283,13 +295,7 @@ fn main() {
                 if target.author.id.0 == 1165155849409405020 {
                     match lang {
                         Lang::Uk => {
-                            if !uk_hinted
-                                && SystemTime::now()
-                                    .duration_since(uk_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
-                            {
+                            if !uk_hinted && not_too_early(uk_asked) {
                                 uk_hinted = true;
                                 uk_asked = SystemTime::now();
                                 drop(
@@ -305,13 +311,7 @@ fn main() {
                             }
                         }
                         Lang::En => {
-                            if !en_hinted
-                                && SystemTime::now()
-                                    .duration_since(en_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
-                            {
+                            if !en_hinted && not_too_early(en_asked) {
                                 en_hinted = true;
                                 en_asked = SystemTime::now();
                                 drop(
@@ -350,30 +350,29 @@ fn main() {
                 match lang {
                     Lang::Uk => {
                         if text.starts_with("!") {
-                            if (text == "!next" || text == "!далі" || text == "!відповідь")
-                                && SystemTime::now()
-                                    .duration_since(uk_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
+                            if text == "!next" || text == "!далі" || text == "!відповідь"
                             {
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &current_question.answer,
-                                    "",
-                                    false,
-                                );
-                                // reset ask time and hint
-                                uk_asked = SystemTime::now();
-                                uk_hinted = false;
-                                current_question =
-                                    data_uk.choose(&mut rng).expect("no more questions?");
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &current_question.to_string(),
-                                    "",
-                                    false,
-                                );
+                                if not_too_early(uk_asked) {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &current_question.answer,
+                                        "",
+                                        false,
+                                    );
+                                    // reset ask time and hint
+                                    uk_asked = SystemTime::now();
+                                    uk_hinted = false;
+                                    current_question =
+                                        data_uk.choose(&mut rng).expect("no more questions?");
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &current_question.to_string(),
+                                        "",
+                                        false,
+                                    );
+                                } else {
+                                    react_timer(&message, &discord);
+                                }
                             } else if text == "!q" || text == "!питання" || text == "!п" {
                                 let _ = discord.send_message(
                                     message.channel_id,
@@ -381,22 +380,22 @@ fn main() {
                                     "",
                                     false,
                                 );
-                            } else if (text == "!підказка" || text == "!хінт")
-                                && SystemTime::now()
-                                    .duration_since(uk_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
-                            {
+                            } else if text == "!підказка" || text == "!хінт" {
                                 if !uk_hinted {
-                                    uk_hinted = true;
-                                    uk_asked = SystemTime::now();
-                                    let _ = discord.send_message(
-                                        message.channel_id,
-                                        &produce_hint(current_question),
-                                        "",
-                                        false,
-                                    );
+                                    if not_too_early(uk_asked) {
+                                        uk_hinted = true;
+                                        uk_asked = SystemTime::now();
+                                        let _ = discord.send_message(
+                                            message.channel_id,
+                                            &produce_hint(current_question),
+                                            "",
+                                            false,
+                                        );
+                                    } else {
+                                        react_timer(&message, &discord);
+                                    }
+                                } else {
+                                    react_stop(&message, &discord);
                                 }
                             } else if text == "!рейтинг" {
                                 let (score, standing, total) = get_score(&db, message.author.id.0);
@@ -469,10 +468,6 @@ fn main() {
                         );
                             }
                         } else if text.contains(&current_question.answer) {
-                            println!(
-                                "{}: {} says: {}",
-                                message.timestamp, message.author.name, text
-                            );
                             // ansver verify and update score
                             let new_score =
                                 increment_score(&db, message.author.id.0, current_question.score);
@@ -508,29 +503,27 @@ fn main() {
                     }
                     Lang::En => {
                         if text.starts_with('!') {
-                            if (text == "!next" || text == "!answer")
-                                && SystemTime::now()
-                                    .duration_since(en_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
-                            {
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &current_en_question.answer,
-                                    "",
-                                    false,
-                                );
-                                en_asked = SystemTime::now();
-                                en_hinted = false;
-                                current_en_question =
-                                    data_en.choose(&mut rng).expect("no more questions?");
-                                let _ = discord.send_message(
-                                    message.channel_id,
-                                    &current_en_question.to_string(),
-                                    "",
-                                    false,
-                                );
+                            if text == "!next" || text == "!answer" {
+                                if not_too_early(en_asked) {
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &current_en_question.answer,
+                                        "",
+                                        false,
+                                    );
+                                    en_asked = SystemTime::now();
+                                    en_hinted = false;
+                                    current_en_question =
+                                        data_en.choose(&mut rng).expect("no more questions?");
+                                    let _ = discord.send_message(
+                                        message.channel_id,
+                                        &current_en_question.to_string(),
+                                        "",
+                                        false,
+                                    );
+                                } else {
+                                    react_timer(&message, &discord);
+                                }
                             } else if text == "!q" || text == "!question" {
                                 let _ = discord.send_message(
                                     message.channel_id,
@@ -538,28 +531,22 @@ fn main() {
                                     "",
                                     false,
                                 );
-                            } else if text == "!hint"
-                                && SystemTime::now()
-                                    .duration_since(en_asked)
-                                    .unwrap()
-                                    .as_millis()
-                                    > MIN_PAUSE
-                            {
-                                if !en_hinted
-                                    && SystemTime::now()
-                                        .duration_since(en_asked)
-                                        .unwrap()
-                                        .as_millis()
-                                        > MIN_PAUSE
-                                {
-                                    en_hinted = true;
-                                    en_asked = SystemTime::now();
-                                    let _ = discord.send_message(
-                                        message.channel_id,
-                                        &produce_hint(current_en_question),
-                                        "",
-                                        false,
-                                    );
+                            } else if text == "!hint" {
+                                if !en_hinted {
+                                    if not_too_early(en_asked) {
+                                        en_hinted = true;
+                                        en_asked = SystemTime::now();
+                                        let _ = discord.send_message(
+                                            message.channel_id,
+                                            &produce_hint(current_en_question),
+                                            "",
+                                            false,
+                                        );
+                                    } else {
+                                        react_timer(&message, &discord);
+                                    }
+                                } else {
+                                    react_stop(&message, &discord);
                                 }
                             } else if text == "!score" {
                                 let (score, standing, total) = get_score(&db, message.author.id.0);
@@ -686,4 +673,15 @@ fn bold_test() {
     let r = Regex::new(r"(\[B\])|(\[\/B])").unwrap();
     let res = r.replace_all("Те саме, що [B]заванта́жувати[/B]", "**");
     assert_eq!(res, "Те саме, що **заванта́жувати**")
+}
+
+#[test]
+fn not_yet_test() {
+    let one_min_in_the_past = SystemTime::UNIX_EPOCH
+        + SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .saturating_sub(std::time::Duration::from_secs(61));
+    assert!(not_too_early(one_min_in_the_past));
+    assert!(!not_too_early(SystemTime::now()));
 }
