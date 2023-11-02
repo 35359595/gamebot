@@ -352,7 +352,7 @@ fn main() {
                         if text.starts_with("!") {
                             if text == "!next" || text == "!далі" || text == "!відповідь"
                             {
-                                if not_too_early(uk_asked) {
+                                if uk_hinted || not_too_early(uk_asked) {
                                     let _ = discord.send_message(
                                         message.channel_id,
                                         &current_question.answer,
@@ -504,7 +504,7 @@ fn main() {
                     Lang::En => {
                         if text.starts_with('!') {
                             if text == "!next" || text == "!answer" {
-                                if not_too_early(en_asked) {
+                                if en_hinted || not_too_early(en_asked) {
                                     let _ = discord.send_message(
                                         message.channel_id,
                                         &current_en_question.answer,
